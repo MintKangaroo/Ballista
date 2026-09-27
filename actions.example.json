@@ -1,0 +1,11 @@
+[
+  {"action_id":"act-0001","tool_name":"nmap","target":"10.20.0.5",
+   "action_class":"read","attack":{"tactic":"TA0007","technique":"T1046"},
+   "params":{"targets":["10.20.0.5"],"top_ports":100}},
+  {"action_id":"act-0002","tool_name":"nmap","target":"8.8.8.8",
+   "action_class":"read","attack":{"tactic":"TA0007","technique":"T1046"},
+   "params":{"targets":["8.8.8.8"]},"rationale":"범위 밖 — 차단되어야 함"},
+  {"action_id":"act-0003","tool_name":"exploit","target":"10.20.0.5",
+   "action_class":"modify","attack":{"tactic":"TA0001","technique":"T1190"},
+   "params":{"target":"10.20.0.5"},"rationale":"실행부 미구현 — PENDING"}
+]

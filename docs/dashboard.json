@@ -1,0 +1,133 @@
+{
+  "engagement": {
+    "id": "ENG-2026-0042",
+    "name": "Q4 내부망 정기 점검",
+    "scope_signed": true,
+    "window_active": true,
+    "max_class": "modify"
+  },
+  "KPI": [
+    {
+      "lab": "EXECUTED ACTIONS",
+      "val": 2,
+      "u": "",
+      "meta": "기록 2건",
+      "kc": "--amber"
+    },
+    {
+      "lab": "SUCCESSFUL PATHS",
+      "val": 0,
+      "u": "",
+      "meta": "없음",
+      "kc": "--allow"
+    },
+    {
+      "lab": "FINDINGS",
+      "val": 0,
+      "u": "",
+      "meta": "critical 0 · high 0",
+      "metaCrit": false,
+      "kc": "--cred"
+    },
+    {
+      "lab": "DETECTION GAPS",
+      "val": 0,
+      "u": "",
+      "meta": "미탐지 성공 기법",
+      "metaCrit": false,
+      "kc": "--deny"
+    },
+    {
+      "lab": "CHAIN INTEGRITY",
+      "val": "OK",
+      "u": "",
+      "meta": "2/2 verified",
+      "kc": "--allow"
+    }
+  ],
+  "KILLCHAIN": [
+    {
+      "t": "Reconnaissance",
+      "id": "TA0043",
+      "c": "--recon",
+      "att": 0,
+      "ok": 0
+    },
+    {
+      "t": "Discovery",
+      "id": "TA0007",
+      "c": "--recon",
+      "att": 2,
+      "ok": 1
+    },
+    {
+      "t": "Initial Access",
+      "id": "TA0001",
+      "c": "--exploit",
+      "att": 0,
+      "ok": 0
+    },
+    {
+      "t": "Credential Access",
+      "id": "TA0006",
+      "c": "--cred",
+      "att": 0,
+      "ok": 0
+    },
+    {
+      "t": "Lateral Movement",
+      "id": "TA0008",
+      "c": "--lateral",
+      "att": 0,
+      "ok": 0
+    },
+    {
+      "t": "Impact",
+      "id": "TA0040",
+      "c": "--impact",
+      "att": 0,
+      "ok": 0
+    }
+  ],
+  "FEED": [
+    {
+      "tm": "13:39:44",
+      "d1": "범위 밖 대상 차단 → 8.8.8.8",
+      "d2": "nmap · T1046",
+      "rc": "blocked",
+      "cls": "read",
+      "what": "허용 범위 밖 대상으로 향하는 행위가 시도됐지만, 실행되기 전에 차단됐습니다.",
+      "why": "대상이 허용 범위(CIDR/호스트)에 없어 deny-by-default로 차단됐습니다.",
+      "atk": "해당 없음 — 통제 계층(안전장치)입니다.",
+      "def": "교전이 계약된 범위를 벗어나지 않도록 보장하는 안전장치입니다. 오탐·실수로 외부를 건드리는 사고를 막습니다."
+    },
+    {
+      "tm": "13:39:44",
+      "d1": "서비스 탐지 → 10.20.0.5",
+      "d2": "nmap · T1046",
+      "rc": "success",
+      "cls": "read",
+      "what": "대상 네트워크에서 어떤 서비스(열린 포트)가 돌고 있는지 파악했습니다. 공격 표면을 그리는 첫 단계입니다.",
+      "why": "대상이 범위 안이고 허용 기법·등급(action_class: read)이라 통과해 실행됐습니다.",
+      "atk": "T1046 — 네트워크 서비스 탐지.",
+      "def": "다수 포트로의 연결 시도, SYN 스캔 패턴이 신호입니다. 방화벽 로그와 IDS 스캔 탐지로 잡습니다."
+    }
+  ],
+  "GAPS": [],
+  "VULNS": [],
+  "SCOPE": {
+    "time_window": "active",
+    "max_class": "modify",
+    "approver": "보안팀장",
+    "signature": "Ed25519 ✓",
+    "in_scope": [
+      "10.20.0.0/24",
+      "10.20.4.0/23",
+      "app01.internal.example"
+    ],
+    "out_of_scope": [
+      "10.20.0.1",
+      "dc01.internal.example"
+    ]
+  }
+}

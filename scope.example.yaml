@@ -1,0 +1,31 @@
+schema_version: '1.0'
+engagement:
+  id: ENG-2026-0042
+  name: Q4 내부망 정기 점검
+  authorized_by: 보안팀장
+  roe_document_ref: RoE-2026-Q4-v3
+target:
+  in_scope_cidrs:
+  - 10.20.0.0/24
+  - 10.20.4.0/23
+  in_scope_hosts:
+  - app01.internal.example
+  out_of_scope_hosts:
+  - 10.20.0.1
+  - dc01.internal.example
+constraints:
+  time_window:
+    start: '2026-01-01T00:00:00+09:00'
+    end: '2030-12-31T23:59:59+09:00'
+  max_action_class: modify
+  allowed_techniques: []
+  denied_techniques:
+  - T1486
+  - T1485
+approval:
+  destructive_requires: human
+signature:
+  algorithm: Ed25519
+  key_id: secteam-signing-2026
+  signed_at: '2026-09-27T14:00:00+09:00'
+  value: cc2e872eda28f4cda5f9587c77696b5785ebbafa9f31a265cd69c8c5472ac8c322c668378632dc15788783d0cdcfe705f743eaa2c66950b137445a654d1ffb07

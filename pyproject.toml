@@ -1,0 +1,20 @@
+[project]
+name = "ballista"
+version = "0.1.0"
+description = "스코프 안에서만 검증된 도구를 조율·기록·분석하는 반자동 침투 테스트 오케스트레이션 프레임워크"
+requires-python = ">=3.11"
+dependencies = [
+    "pyyaml>=6.0",
+    "jsonschema>=4.0",
+    "cryptography>=42.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+ballista = "ballista.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

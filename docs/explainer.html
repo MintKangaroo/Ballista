@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ballista — 침투 테스트 오케스트레이션 원리</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Noto+Sans+KR:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0f1319; --panel:#161c25; --panel-2:#1c2430; --line:#2a3543;
+  --ink:#e6ecf3; --ink-dim:#93a2b5; --ink-faint:#61728a;
+  --amber:#e6a641; --amber-soft:#3a2f1a;
+  --recon:#3fb6a8; --exploit:#e6a641; --cred:#e07d3a; --lateral:#e0524f;
+  --allow:#43b581; --deny:#e0524f; --wait:#c9a227;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --disp:"Chakra Petch","Noto Sans KR",sans-serif;
+  --body:"Noto Sans KR",system-ui,sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+:root:not([data-theme="dark"]){
+  @media (prefers-color-scheme:light){
+    --bg:#eef1f5; --panel:#ffffff; --panel-2:#f4f6f9; --line:#d3dae3;
+    --ink:#1a222d; --ink-dim:#4a5a6e; --ink-faint:#7688a0; --amber-soft:#f6ecd6;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#eef1f5; --panel:#ffffff; --panel-2:#f4f6f9; --line:#d3dae3;
+  --ink:#1a222d; --ink-dim:#4a5a6e; --ink-faint:#7688a0; --amber-soft:#f6ecd6;
+}
+*{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:var(--body); line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+  background-size:44px 44px; background-position:center;
+  background-attachment:fixed;
+}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse at 50% 0%,transparent 40%,var(--bg) 85%);pointer-events:none;z-index:0}
+.wrap{position:relative;z-index:1;max-width:1000px;margin:0 auto;padding:clamp(20px,4vw,44px) clamp(16px,4vw,32px) 80px}
+
+header{margin-bottom:28px}
+.mark{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+h1{font-family:var(--disp);font-weight:700;font-size:clamp(34px,7vw,58px);letter-spacing:.04em;margin:0;line-height:1}
+h1 .glow{color:var(--amber);text-shadow:0 0 24px rgba(230,166,65,.35)}
+.tag{font-family:var(--mono);font-size:12px;color:var(--amber);border:1px solid var(--amber);padding:3px 8px;border-radius:3px;letter-spacing:.05em}
+.lede{color:var(--ink-dim);max-width:62ch;margin:14px 0 0;font-size:clamp(15px,2.4vw,17px)}
+
+nav{display:flex;gap:6px;flex-wrap:wrap;margin:26px 0 30px;border-bottom:1px solid var(--line);padding-bottom:0}
+.tab{font-family:var(--disp);font-weight:600;font-size:14px;letter-spacing:.02em;color:var(--ink-dim);background:none;border:0;border-bottom:2px solid transparent;padding:11px 15px;cursor:pointer;transition:color .15s,border-color .15s;translate:0 1px}
+.tab:hover{color:var(--ink)}
+.tab[aria-selected="true"]{color:var(--amber);border-bottom-color:var(--amber)}
+.tab .n{font-family:var(--mono);font-size:11px;color:var(--ink-faint);margin-right:7px}
+.tab[aria-selected="true"] .n{color:var(--amber)}
+
+.view{display:none;animation:in .35s ease both}
+.view.on{display:block}
+@keyframes in{from{opacity:0;translate:0 8px}to{opacity:1;translate:0 0}}
+@media (prefers-reduced-motion:reduce){.view,*{animation:none!important;transition:none!important}}
+
+h2{font-family:var(--disp);font-weight:600;font-size:20px;letter-spacing:.01em;margin:0 0 4px}
+.sub{color:var(--ink-dim);font-size:14px;margin:0 0 22px;max-width:66ch}
+
+/* ===== 공격 체인 ===== */
+.chain{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@media(max-width:720px){.chain{grid-template-columns:1fr 1fr}}
+@media(max-width:440px){.chain{grid-template-columns:1fr}}
+.stage{position:relative;text-align:left;background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--c);border-radius:6px;padding:16px 14px;cursor:pointer;transition:background .15s,transform .1s;color:inherit;font-family:inherit}
+.stage:hover{background:var(--panel-2)}
+.stage[aria-pressed="true"]{background:var(--panel-2);box-shadow:0 0 0 1px var(--c),0 8px 30px -12px var(--c)}
+.stage .idx{font-family:var(--mono);font-size:11px;color:var(--c);opacity:.8}
+.stage .nm{font-family:var(--disp);font-weight:600;font-size:15px;margin:6px 0 2px}
+.stage .en{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
+.stage .tac{margin-top:12px;font-family:var(--mono);font-size:11px;color:var(--ink-dim)}
+.heatbar{height:4px;border-radius:99px;margin:22px 0 4px;background:linear-gradient(90deg,var(--recon),var(--exploit),var(--cred),var(--lateral))}
+.heat-label{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--ink-faint);margin-bottom:24px}
+.detail{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--c,var(--amber));border-radius:6px;padding:20px;min-height:120px}
+.detail .dh{font-family:var(--disp);font-weight:600;font-size:17px;margin:0 0 3px;color:var(--c)}
+.detail .de{font-family:var(--mono);font-size:12px;color:var(--ink-faint);margin-bottom:14px}
+.detail p{margin:0 0 14px;color:var(--ink);font-size:14.5px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:13px}
+.kv dt{color:var(--ink-dim);font-family:var(--mono);font-size:12px}
+.kv dd{margin:0}
+.chip{display:inline-block;font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:3px;border:1px solid var(--line);background:var(--panel-2)}
+.chip.read{color:var(--recon);border-color:var(--recon)}
+.chip.modify{color:var(--cred);border-color:var(--cred)}
+.chip.destructive{color:var(--deny);border-color:var(--deny)}
+.detail .empty{color:var(--ink-faint);font-size:14px}
+
+/* ===== 파이프라인 ===== */
+.ctrl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:22px}
+select,.btn{font-family:var(--body);font-size:14px;border-radius:5px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:9px 12px}
+select{min-width:230px}
+.btn{font-family:var(--disp);font-weight:600;letter-spacing:.03em;cursor:pointer;background:var(--amber);color:#1a130a;border-color:var(--amber);transition:filter .15s}
+.btn:hover{filter:brightness(1.08)}
+.btn:disabled{opacity:.5;cursor:default}
+.pipe{display:flex;flex-direction:column;gap:0}
+.gate{display:grid;grid-template-columns:34px 1fr auto;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:13px 15px;opacity:.5;transition:opacity .25s,box-shadow .25s,border-color .25s}
+.gate.active{opacity:1;border-color:var(--amber);box-shadow:0 0 0 1px var(--amber)}
+.gate.pass{opacity:1;border-color:var(--allow)}
+.gate.block{opacity:1;border-color:var(--deny);box-shadow:0 0 26px -8px var(--deny)}
+.gate.wait{opacity:1;border-color:var(--wait)}
+.gate .dot{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-family:var(--mono);font-size:13px;background:var(--panel-2);border:1px solid var(--line);color:var(--ink-dim)}
+.gate.pass .dot{background:var(--allow);color:#0d1a13;border-color:var(--allow)}
+.gate.block .dot{background:var(--deny);color:#1a0d0d;border-color:var(--deny)}
+.gate.wait .dot{background:var(--wait);color:#1a160a;border-color:var(--wait)}
+.gate .gname{font-family:var(--disp);font-weight:600;font-size:14px}
+.gate .gwhat{font-size:12.5px;color:var(--ink-dim);margin-top:1px}
+.gate .verdict{font-family:var(--mono);font-size:11px;color:var(--ink-faint);text-align:right;max-width:190px}
+.gate.pass .verdict{color:var(--allow)}
+.gate.block .verdict{color:var(--deny)}
+.gate.wait .verdict{color:var(--wait)}
+.connector{height:14px;width:2px;background:var(--line);margin-left:32px}
+.outcome{margin-top:18px;padding:14px 16px;border-radius:6px;font-size:14px;border:1px solid var(--line);background:var(--panel);min-height:20px}
+.outcome.ok{border-color:var(--allow);color:var(--allow)}
+.outcome.no{border-color:var(--deny);color:var(--deny)}
+.outcome.hold{border-color:var(--wait);color:var(--wait)}
+.outcome b{font-family:var(--mono)}
+
+/* ===== 아키텍처 ===== */
+.layers{display:flex;flex-direction:column;gap:8px}
+.layer{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px 16px}
+.layer .ln{font-family:var(--disp);font-weight:600;font-size:14px}
+.layer .ld{font-size:12.5px;color:var(--ink-dim);margin-top:2px}
+.layer .lt{font-family:var(--mono);font-size:10px;color:var(--ink-faint);border:1px solid var(--line);border-radius:3px;padding:2px 6px;white-space:nowrap}
+.flowdot{text-align:center;color:var(--ink-faint);font-size:12px;line-height:.6}
+
+/* ===== 증거 체인 ===== */
+.chain-note{background:var(--amber-soft);border:1px solid var(--amber);border-radius:6px;padding:12px 15px;font-size:13.5px;margin-bottom:20px;color:var(--ink)}
+.blocks{display:flex;flex-direction:column;gap:0}
+.block{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px 15px;transition:border-color .2s,box-shadow .2s}
+.block.bad{border-color:var(--deny);box-shadow:0 0 24px -10px var(--deny)}
+.block .bh{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
+.block .seq{font-family:var(--mono);font-size:12px;color:var(--amber)}
+.block .status{font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:3px;border:1px solid var(--allow);color:var(--allow)}
+.block.bad .status{border-color:var(--deny);color:var(--deny)}
+.block input{width:100%;font-family:var(--body);font-size:13.5px;background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:7px 9px}
+.hashrow{font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);margin-top:8px;display:grid;gap:2px;word-break:break-all}
+.hashrow b{color:var(--ink-dim);font-weight:500}
+.hashrow .cur{color:var(--ink-dim)}
+.block.bad .hashrow .cur{color:var(--deny)}
+.blink{height:14px;width:2px;background:var(--line);margin-left:20px}
+.reset{margin-top:16px}
+.reset .btn{background:var(--panel);color:var(--ink);border-color:var(--line)}
+
+footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);font-size:12px;color:var(--ink-faint);font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="mark">
+    <h1>BALL<span class="glow">I</span>STA</h1>
+    <span class="tag">learn · v0.1</span>
+  </div>
+  <p class="lede">침투 공격이 어떤 단계로 흐르는지, 그리고 그 각 행위를 Ballista가 어떻게 범위 안에서만 통제·기록하는지를 원리 중심으로 살펴봅니다. 실제 익스플로잇 실행이 아니라 개념·흐름·매핑을 다룹니다.</p>
+</header>
+
+<nav role="tablist">
+  <button class="tab" role="tab" aria-selected="true" data-v="chain"><span class="n">01</span>공격 체인</button>
+  <button class="tab" role="tab" aria-selected="false" data-v="pipe"><span class="n">02</span>액션 파이프라인</button>
+  <button class="tab" role="tab" aria-selected="false" data-v="arch"><span class="n">03</span>아키텍처</button>
+  <button class="tab" role="tab" aria-selected="false" data-v="evi"><span class="n">04</span>증거 체인</button>
+</nav>
+
+<!-- 01 공격 체인 -->
+<section class="view on" id="v-chain">
+  <h2>침투 공격의 네 단계</h2>
+  <p class="sub">단계가 진행될수록 권한과 파급이 커집니다(색이 뜨거워집니다). 카드를 눌러 각 단계의 목적, 대응하는 MITRE ATT&CK 전술, Ballista에서의 처리 방식을 보세요.</p>
+  <div class="chain" id="chain"></div>
+  <div class="heatbar"></div>
+  <div class="heat-label"><span>낮은 권한 · 읽기</span><span>escalation →</span><span>높은 권한 · 확산</span></div>
+  <div class="detail" id="chain-detail"><span class="empty">위 단계 카드를 선택하세요.</span></div>
+</section>
+
+<!-- 02 파이프라인 -->
+<section class="view" id="v-pipe">
+  <h2>하나의 액션이 게이트를 통과하는 법</h2>
+  <p class="sub">Planner(LLM)는 액션을 <b>제안만</b> 합니다. 실제 실행 전에 여러 안전 게이트를 통과해야 하며, 하나라도 막히면 거기서 멈춥니다. 시나리오를 골라 "발사"해보세요.</p>
+  <div class="ctrl">
+    <select id="scenario" aria-label="시나리오 선택"></select>
+    <button class="btn" id="fire">▸ 발사</button>
+  </div>
+  <div class="pipe" id="pipe"></div>
+  <div class="outcome" id="outcome">시나리오를 선택하고 발사하세요.</div>
+</section>
+
+<!-- 03 아키텍처 -->
+<section class="view" id="v-arch">
+  <h2>6 레이어 구조</h2>
+  <p class="sub">위에서 아래로 통제가 흐릅니다. 위 레이어를 통과하지 못하면 아래는 절대 실행되지 않습니다(deny-by-default).</p>
+  <div class="layers" id="layers"></div>
+</section>
+
+<!-- 04 증거 체인 -->
+<section class="view" id="v-evi">
+  <h2>변조를 막는 해시 체인</h2>
+  <p class="sub">각 기록의 해시는 <b>자기 내용 + 직전 해시</b>로 계산됩니다. 그래서 중간 기록을 한 줄만 바꿔도 그 이후 전부가 깨집니다.</p>
+  <div class="chain-note">아래 블록의 내용을 직접 수정해 보세요. 수정한 블록부터 끝까지 상태가 <b>TAMPERED</b>로 바뀌며 연쇄적으로 무너집니다. 실제 SHA-256으로 계산됩니다.</div>
+  <div class="blocks" id="blocks"></div>
+  <div class="reset"><button class="btn" id="reset-chain">체인 초기화</button></div>
+</section>
+
+<footer>Ballista · 학습용 시각화 — 개념·원리·ATT&CK 매핑 전용</footer>
+</div>
+
+<script>
+/* ---------- 탭 전환 ---------- */
+const tabs=[...document.querySelectorAll('.tab')];
+const views={chain:'v-chain',pipe:'v-pipe',arch:'v-arch',evi:'v-evi'};
+tabs.forEach(t=>t.addEventListener('click',()=>{
+  tabs.forEach(x=>x.setAttribute('aria-selected',x===t));
+  Object.values(views).forEach(id=>document.getElementById(id).classList.remove('on'));
+  document.getElementById(views[t.dataset.v]).classList.add('on');
+}));
+
+/* ---------- 01 공격 체인 ---------- */
+const STAGES=[
+  {c:'--recon',idx:'01',nm:'정찰',en:'Reconnaissance',
+   tac:'TA0043 / TA0007',
+   purpose:'대상의 호스트·서비스·취약점을 식별해 공격 표면을 파악합니다. 아직 대상 상태를 바꾸지 않는 읽기 단계입니다.',
+   attack:'TA0043 Reconnaissance · TA0007 Discovery (예: T1046 서비스 탐지)',
+   adapter:'nmap · nuclei',cls:'read',
+   gate:'스코프 검증 — 대상이 허용 범위(CIDR/호스트) 안인지 확인. 밖이면 패킷조차 나가지 않음.'},
+  {c:'--exploit',idx:'02',nm:'익스플로잇',en:'Exploitation',
+   tac:'TA0001',
+   purpose:'식별된 취약점을 이용해 시스템에 대한 초기 발판(foothold)을 확보합니다. 상태를 바꾸는 단계로 진입합니다.',
+   attack:'TA0001 Initial Access (예: T1190 공개 서비스 취약점 악용)',
+   adapter:'exploit 어댑터 (외부 검증 도구 위임)',cls:'modify',
+   gate:'action_class 상한 검증 + 필요 시 승인 게이트. 스코프에 허용된 등급을 넘으면 차단.'},
+  {c:'--cred',idx:'03',nm:'자격증명 수집',en:'Credential Access',
+   tac:'TA0006',
+   purpose:'확보한 접근을 이용해 계정·인증정보를 얻습니다. 이후 확산의 열쇠가 되는 민감 단계입니다.',
+   attack:'TA0006 Credential Access (예: T1003 자격증명 덤프, T1110 무차별 대입)',
+   adapter:'credential 어댑터 (외부 검증 도구 위임)',cls:'modify',
+   gate:'사람 승인 또는 사전 서명된 허용 + 모든 결과를 evidence 체인에 기록.'},
+  {c:'--lateral',idx:'04',nm:'측면 이동',en:'Lateral Movement',
+   tac:'TA0008',
+   purpose:'얻은 자격증명으로 내부의 다른 시스템으로 이동해 장악 범위를 넓힙니다. 파급이 가장 큰 단계입니다.',
+   attack:'TA0008 Lateral Movement (예: T1021 원격 서비스 이용)',
+   adapter:'lateral 어댑터 (외부 검증 도구 위임)',cls:'modify',
+   gate:'이동 대상마다 스코프 재검증 + 시간창(time-window) 확인. 범위 밖 호스트로는 이동 불가.'}
+];
+const chainEl=document.getElementById('chain'),detEl=document.getElementById('chain-detail');
+STAGES.forEach((s,i)=>{
+  const b=document.createElement('button');
+  b.className='stage';b.style.setProperty('--c',`var(${s.c})`);
+  b.setAttribute('aria-pressed','false');
+  b.innerHTML=`<div class="idx">STAGE ${s.idx}</div><div class="nm">${s.nm}</div><div class="en">${s.en}</div><div class="tac">${s.tac}</div>`;
+  b.addEventListener('click',()=>{
+    document.querySelectorAll('.stage').forEach(x=>x.setAttribute('aria-pressed','false'));
+    b.setAttribute('aria-pressed','true');
+    detEl.style.setProperty('--c',`var(${s.c})`);
+    detEl.innerHTML=`<div class="dh">${s.nm} · ${s.en}</div><div class="de">${s.tac}</div>
+      <p>${s.purpose}</p>
+      <dl class="kv">
+        <dt>ATT&CK</dt><dd>${s.attack}</dd>
+        <dt>어댑터</dt><dd>${s.adapter}</dd>
+        <dt>action_class</dt><dd><span class="chip ${s.cls}">${s.cls}</span></dd>
+        <dt>안전 게이트</dt><dd>${s.gate}</dd>
+      </dl>`;
+  });
+  chainEl.appendChild(b);
+});
+
+/* ---------- 02 파이프라인 ---------- */
+const GATES=[
+  {k:'planner',n:'Planner',w:'LLM이 다음 기법을 제안 (실행 권한 없음)'},
+  {k:'scope',n:'Scope Gate',w:'대상이 허용 범위 안인가?'},
+  {k:'window',n:'Policy · 시간창',w:'허용된 시간 안인가?'},
+  {k:'tech',n:'Policy · 기법',w:'허용된 ATT&CK 기법인가?'},
+  {k:'class',n:'Policy · 등급',w:'action_class가 상한 이내인가?'},
+  {k:'adapter',n:'Adapter',w:'검증된 외부 도구 호출 (개념)'},
+  {k:'evidence',n:'Evidence',w:'해시 체인에 기록'},
+  {k:'reporter',n:'Reporter',w:'ATT&CK 커버리지 집계'}
+];
+const SCEN=[
+  {id:'ok',label:'범위 내 정찰 스캔 (nmap, read)',
+   res:{scope:1,window:1,tech:1,class:1},cls:'read',dest:false},
+  {id:'oos',label:'범위 밖 대상 (8.8.8.8)',
+   res:{scope:0},cls:'read',dest:false},
+  {id:'win',label:'시간창 밖 실행 시도',
+   res:{scope:1,window:0},cls:'read',dest:false},
+  {id:'tech',label:'금지된 기법 (T1486 랜섬류)',
+   res:{scope:1,window:1,tech:0},cls:'destructive',dest:true},
+  {id:'over',label:'등급 초과 (destructive > 상한 modify)',
+   res:{scope:1,window:1,tech:1,class:0},cls:'destructive',dest:true},
+  {id:'appr',label:'파괴적 행위 (승인 필요)',
+   res:{scope:1,window:1,tech:1,class:1},cls:'destructive',dest:true}
+];
+const selEl=document.getElementById('scenario');
+SCEN.forEach(s=>{const o=document.createElement('option');o.value=s.id;o.textContent=s.label;selEl.appendChild(o)});
+const pipeEl=document.getElementById('pipe'),outEl=document.getElementById('outcome');
+function renderPipe(){
+  pipeEl.innerHTML='';
+  GATES.forEach((g,i)=>{
+    const d=document.createElement('div');d.className='gate';d.dataset.k=g.k;
+    d.innerHTML=`<div class="dot">${String(i+1).padStart(2,'0')}</div>
+      <div><div class="gname">${g.n}</div><div class="gwhat">${g.w}</div></div>
+      <div class="verdict"></div>`;
+    pipeEl.appendChild(d);
+    if(i<GATES.length-1){const c=document.createElement('div');c.className='connector';pipeEl.appendChild(c)}
+  });
+}
+renderPipe();
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+let firing=false;
+document.getElementById('fire').addEventListener('click',async()=>{
+  if(firing)return;firing=true;
+  const s=SCEN.find(x=>x.id===selEl.value);
+  renderPipe();outEl.className='outcome';outEl.textContent='';
+  const gel=k=>pipeEl.querySelector(`.gate[data-k="${k}"]`);
+  const setV=(k,cls,txt)=>{const e=gel(k);e.className='gate '+cls;e.querySelector('.verdict').textContent=txt};
+  const step=reduce?0:360;
+  // planner 항상 통과 (제안)
+  setV('planner','active','제안 생성');await wait(step);
+  setV('planner','pass','OK');
+  const checks=[['scope','범위 밖 대상 → DENY','ALLOW'],['window','시간창 밖 → DENY','within window'],
+               ['tech','금지 기법 → DENY','technique allowed'],['class','등급 초과 → DENY','class ≤ 상한']];
+  let blocked=false;
+  for(const [k,failtxt,oktxt] of checks){
+    if(!(k in s.res)){continue}
+    setV(k,'active','검사 중…');await wait(step);
+    if(s.res[k]===0){setV(k,'block','DENY');
+      outEl.className='outcome no';
+      outEl.innerHTML=`<b>${k.toUpperCase()}</b> 게이트에서 차단됨 — ${failtxt.split('→')[0].trim()}. 이후 단계는 실행되지 않습니다.`;
+      blocked=true;break;
+    }else{setV(k,'pass',oktxt)}
+  }
+  if(blocked){firing=false;return}
+  // destructive → 승인 대기
+  if(s.dest && s.id==='appr'){
+    setV('class','wait','REQUIRE_APPROVAL');await wait(step);
+    outEl.className='outcome hold';
+    outEl.innerHTML=`파괴적(destructive) 행위 → <b>사람 승인 대기</b>. 스코프에 사전 서명된 허용이 없으면 여기서 멈춥니다.`;
+    firing=false;return;
+  }
+  // 통과 → adapter/evidence/reporter
+  for(const k of ['adapter','evidence','reporter']){
+    setV(k,'active','처리 중…');await wait(step);setV(k,'pass','OK');
+  }
+  outEl.className='outcome ok';
+  outEl.innerHTML=`모든 게이트 통과 → 실행·기록 완료. 결과가 <b>evidence 체인</b>에 남고 ATT&CK 커버리지에 반영됩니다.`;
+  firing=false;
+});
+
+/* ---------- 03 아키텍처 ---------- */
+const LAYERS=[
+  ['Authorization','스코프 서명 검증 · 범위/시간창 · deny-by-default','Ed25519 · JCS'],
+  ['Orchestrator / Planner','LLM: 상태 → 다음 기법 제안 (실행 권한 없음)','structured only'],
+  ['Policy / Guard','등급 판정 · 스코프 재검증 · 승인 게이트','allow/deny/approval'],
+  ['Tool Adapter','검증된 외부 도구 래퍼 (스키마 강제, shell=False)','param_schema'],
+  ['Evidence Store','append-only 해시 체인 (무결성 보장)','sha256 chain'],
+  ['Reporter / Replayer','ATT&CK 커버리지 · Navigator · 재실행 번들','coverage/gaps']
+];
+const layEl=document.getElementById('layers');
+LAYERS.forEach((l,i)=>{
+  const d=document.createElement('div');d.className='layer';
+  d.innerHTML=`<div><div class="ln">${l[0]}</div><div class="ld">${l[1]}</div></div><div class="lt">${l[2]}</div>`;
+  layEl.appendChild(d);
+  if(i<LAYERS.length-1){const f=document.createElement('div');f.className='flowdot';f.textContent='▽';layEl.appendChild(f)}
+});
+
+/* ---------- 04 증거 체인 ---------- */
+const GENESIS='0'.repeat(64);
+const SEED=[
+  'act-001 · nmap 스캔 10.20.0.0/24 · read · T1046',
+  'act-002 · nuclei 취약점 탐지 app01 · read · T1595.002',
+  'act-003 · 초기 접근 확보 app01 · modify · T1190',
+  'act-004 · 원격 서비스 이동 db01 · modify · T1021'
+];
+async function sha256(str){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+let chain=[];
+const blocksEl=document.getElementById('blocks');
+async function buildFrozen(){
+  chain=[];let prev=GENESIS;
+  for(let i=0;i<SEED.length;i++){
+    const content=SEED[i];
+    const h=await sha256(content+prev);
+    chain.push({seq:i+1,content,frozen:h});
+    prev=h;
+  }
+}
+function renderBlocks(){
+  blocksEl.innerHTML='';
+  chain.forEach((b,i)=>{
+    const el=document.createElement('div');el.className='block';el.dataset.i=i;
+    el.innerHTML=`<div class="bh"><span class="seq">block #${b.seq}</span><span class="status">VALID</span></div>
+      <input value="${b.content.replace(/"/g,'&quot;')}" data-i="${i}" aria-label="block ${b.seq} 내용">
+      <div class="hashrow"><span><b>prev :</b> <span class="prev"></span></span><span><b>hash :</b> <span class="cur"></span></span></div>`;
+    blocksEl.appendChild(el);
+    if(i<chain.length-1){const l=document.createElement('div');l.className='blink';blocksEl.appendChild(l)}
+  });
+  blocksEl.querySelectorAll('input').forEach(inp=>inp.addEventListener('input',e=>{
+    chain[+e.target.dataset.i].content=e.target.value;verify();
+  }));
+}
+async function verify(){
+  let prev=GENESIS;
+  const nodes=blocksEl.querySelectorAll('.block');
+  for(let i=0;i<chain.length;i++){
+    const b=chain[i];
+    const cur=await sha256(b.content+prev);
+    const tampered=cur!==b.frozen;
+    const el=nodes[i];
+    el.classList.toggle('bad',tampered);
+    el.querySelector('.status').textContent=tampered?'TAMPERED':'VALID';
+    el.querySelector('.prev').textContent=prev.slice(0,32)+'…';
+    el.querySelector('.cur').textContent=cur.slice(0,32)+'…';
+    prev=cur;
+  }
+}
+async function initChain(){await buildFrozen();renderBlocks();await verify()}
+document.getElementById('reset-chain').addEventListener('click',initChain);
+initChain();
+</script>
+</body>
+</html>
