@@ -33,9 +33,12 @@ from .evidence.store import EvidenceStore, tool_result_to_record
 from .reporter.reporter import coverage_summary, navigator_layer
 from .reporter.report_builder import write_report
 from .reporter.replay import export_replay_yaml
-from .dashboard.binding import export_dashboard_json
 from .ingest.ingest import ingest_file
 from .attack.refs import AttackRef
+from .dashboard.binding import export_dashboard_json, build_dashboard_data
+from .reporter.reporter import detection_gaps
+from .assistant.assistant import build_summary_prompt, build_gap_prompt, build_learn_prompt
+from .assistant.client import ask_claude, sdk_available, DEFAULT_MODEL
 
 
 def _load_keys(keydir: str) -> dict[str, bytes]:
@@ -163,6 +166,37 @@ def _report_doc(args):
         print(f"  ({res['pdf_note']})")
 
 
+def _explain(args):
+    scope = _scope(args)
+    store = EvidenceStore(args.db)
+    detected = set(t.strip() for t in args.detected.split(",") if t.strip()) if args.detected else set()
+    data = build_dashboard_data(store, scope, scope.engagement_id, detected)
+
+    if args.mode == "summary":
+        prompt = build_summary_prompt(data)
+    elif args.mode == "gaps":
+        from .reporter.reporter import coverage_summary
+        gaps = detection_gaps(coverage_summary(store, scope.engagement_id), detected)
+        prompt = build_gap_prompt(gaps)
+    else:  # learn
+        if not args.question:
+            print("[오류] --mode learn 에는 --question 이 필요합니다."); sys.exit(2)
+        prompt = build_learn_prompt(args.question)
+
+    if not args.send:
+        print("# dry-run — 아래 프롬프트를 LLM에 보내려면 --send 를 붙이세요.\n")
+        print(prompt)
+        return
+
+    if not sdk_available():
+        print("[오류] anthropic SDK 미설치. `pip install anthropic` 후 --send 하세요."); sys.exit(1)
+    try:
+        answer = ask_claude(prompt, model=args.model)
+    except Exception as e:
+        print(f"[오류] LLM 호출 실패: {type(e).__name__}: {e}"); sys.exit(1)
+    print(answer)
+
+
 def _replay(args):
     store = EvidenceStore(args.db)
     res = export_replay_yaml(store, args.engagement_id, args.out)
@@ -252,6 +286,15 @@ def main(argv=None):
                     help="부록에 방어 어시스턴트 LLM 프롬프트 포함")
     rd.add_argument("--pdf", action="store_true", help="pandoc 있으면 PDF도 생성")
 
+    ex = sub.add_parser("explain", help="방어 어시스턴트로 교전 해석/탐지공백 방어/ATT&CK 학습")
+    ex.add_argument("scope"); ex.add_argument("keydir")
+    ex.add_argument("--db", default="evidence.db")
+    ex.add_argument("--mode", choices=["summary", "gaps", "learn"], default="summary")
+    ex.add_argument("--question", default="", help="--mode learn 질문")
+    ex.add_argument("--detected", default="", help="SOC 탐지 technique id 콤마구분")
+    ex.add_argument("--send", action="store_true", help="실제 LLM 호출(미지정 시 프롬프트만 출력)")
+    ex.add_argument("--model", default=DEFAULT_MODEL)
+
     rpl = sub.add_parser("replay", help="성공 경로를 결정론적 재실행 명세(YAML)로 export")
     rpl.add_argument("engagement_id")
     rpl.add_argument("--db", default="evidence.db")
@@ -295,6 +338,8 @@ def main(argv=None):
             _report(args)
         elif args.cmd == "report-doc":
             _report_doc(args)
+        elif args.cmd == "explain":
+            _explain(args)
         elif args.cmd == "replay":
             _replay(args)
         elif args.cmd == "verify-chain":
