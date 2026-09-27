@@ -13,3 +13,5 @@ lab/evidence.db
 lab/report.md
 lab/*.pdf
 lab/replay.yaml
+lab/cleanup.db
+lab/*.md

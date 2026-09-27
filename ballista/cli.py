@@ -39,6 +39,7 @@ from .dashboard.binding import export_dashboard_json, build_dashboard_data
 from .reporter.reporter import detection_gaps
 from .assistant.assistant import build_summary_prompt, build_gap_prompt, build_learn_prompt
 from .assistant.client import ask_claude, sdk_available, DEFAULT_MODEL
+from .cleanup.tracker import CleanupTracker, identifier_looks_like_secret
 
 
 def _load_keys(keydir: str) -> dict[str, bytes]:
@@ -166,6 +167,38 @@ def _report_doc(args):
         print(f"  ({res['pdf_note']})")
 
 
+def _cleanup(args):
+    tr = CleanupTracker(args.db)
+    if args.ccmd == "register":
+        scope = _scope(args)
+        if identifier_looks_like_secret(args.id):
+            print("[경고] 식별자에 비밀값이 섞인 것 같습니다. 식별자만 기록하세요(값 금지).")
+        item_id = tr.register(scope.engagement_id, args.type, args.id,
+                              created_by=args.by, host=args.host, note=args.note)
+        print(f"등록: {item_id}  {args.type}:{args.id} — evidence 감사 기록됨")
+    elif args.ccmd == "list":
+        items = tr.list_items(args.engagement_id, args.status)
+        s = tr.summary(args.engagement_id)
+        print(f"총 {s['total']}건 · 미회수 {s['pending']} · 회수완료 {s['reclaimed']}")
+        for i in items:
+            print(f"  [{i['status']}] {i['item_id']}  {i['artifact_type']}:{i['identifier']}"
+                  + (f" @ {i['host']}" if i['host'] else ""))
+    elif args.ccmd == "reclaim":
+        res = tr.reclaim(args.item_id, args.by)
+        if res is None:
+            print(f"해당 item_id 없음: {args.item_id}"); sys.exit(1)
+        print(f"회수 완료: {args.item_id} ({res['artifact_type']}:{res['identifier']}) "
+              f"by {args.by} — evidence 감사 기록됨")
+    elif args.ccmd == "checklist":
+        md = tr.checklist_markdown(args.engagement_id)
+        if args.out:
+            with open(args.out, "w", encoding="utf-8") as f:
+                f.write(md)
+            print(f"체크리스트 생성: {args.out}")
+        else:
+            print(md)
+
+
 def _explain(args):
     scope = _scope(args)
     store = EvidenceStore(args.db)
@@ -286,6 +319,27 @@ def main(argv=None):
                     help="부록에 방어 어시스턴트 LLM 프롬프트 포함")
     rd.add_argument("--pdf", action="store_true", help="pandoc 있으면 PDF도 생성")
 
+    cl = sub.add_parser("cleanup", help="교전 중 생성 아티팩트 추적·회수 체크리스트")
+    clsub = cl.add_subparsers(dest="ccmd", required=True)
+    clr = clsub.add_parser("register", help="생성 아티팩트 등록")
+    clr.add_argument("scope"); clr.add_argument("keydir")
+    clr.add_argument("--type", required=True,
+                     help="session|account|file|scheduled_task|service|other")
+    clr.add_argument("--id", required=True, help="식별자(값 아님): 계정명·경로·세션ID 등")
+    clr.add_argument("--host", default=""); clr.add_argument("--note", default="")
+    clr.add_argument("--by", required=True, help="생성 운용자")
+    clr.add_argument("--db", default="evidence.db")
+    cll = clsub.add_parser("list", help="아티팩트 목록")
+    cll.add_argument("engagement_id"); cll.add_argument("--status", default=None,
+                     choices=["pending", "reclaimed"])
+    cll.add_argument("--db", default="evidence.db")
+    clrc = clsub.add_parser("reclaim", help="아티팩트 회수 처리")
+    clrc.add_argument("item_id"); clrc.add_argument("--by", required=True)
+    clrc.add_argument("--db", default="evidence.db")
+    clc = clsub.add_parser("checklist", help="회수 체크리스트(Markdown)")
+    clc.add_argument("engagement_id"); clc.add_argument("--out", default=None)
+    clc.add_argument("--db", default="evidence.db")
+
     ex = sub.add_parser("explain", help="방어 어시스턴트로 교전 해석/탐지공백 방어/ATT&CK 학습")
     ex.add_argument("scope"); ex.add_argument("keydir")
     ex.add_argument("--db", default="evidence.db")
@@ -338,6 +392,8 @@ def main(argv=None):
             _report(args)
         elif args.cmd == "report-doc":
             _report_doc(args)
+        elif args.cmd == "cleanup":
+            _cleanup(args)
         elif args.cmd == "explain":
             _explain(args)
         elif args.cmd == "replay":
