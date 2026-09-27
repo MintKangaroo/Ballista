@@ -7,3 +7,8 @@ keys/
 *.egg-info/
 .venv/
 node_modules/
+
+# lab 생성물
+lab/evidence.db
+lab/report.md
+lab/*.pdf

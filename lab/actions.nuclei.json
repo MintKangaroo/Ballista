@@ -1,0 +1,11 @@
+[
+  {
+    "action_id": "lab-nuclei-01",
+    "attack": {"tactic": "TA0043", "technique": "T1595", "sub_technique": "T1595.002"},
+    "tool_name": "nuclei",
+    "target": "http://127.0.0.1:18080",
+    "action_class": "read",
+    "params": {"targets": ["http://127.0.0.1:18080"], "severity": ["info","low","medium","high","critical"], "include_tags": ["tech"], "timeout": 5, "rate_limit": 100},
+    "rationale": "양성 표적 nuclei 지문탐지 — 어댑터/기록 라이브 검증"
+  }
+]

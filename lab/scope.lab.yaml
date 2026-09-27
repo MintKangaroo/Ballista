@@ -1,0 +1,22 @@
+schema_version: '1.0'
+engagement:
+  id: ENG-LAB-0001
+  name: 로컬 양성 표적 정찰 파이프라인 검증
+  authorized_by: self-test
+  roe_document_ref: RoE-LAB-local
+target:
+  in_scope_cidrs:
+  - 127.0.0.1/32
+  in_scope_hosts:
+  - localhost
+  out_of_scope_hosts:
+  - 8.8.8.8
+constraints:
+  time_window:
+    start: '2026-01-01T00:00:00+09:00'
+    end: '2030-12-31T23:59:59+09:00'
+  max_action_class: read
+signature:
+  key_id: ballista-lab-2026
+  algorithm: ed25519
+  value: 46930b73ff63ff61ba8c2b57f3bce216b3c3d2bd0d0d9acd43af645e91be40544612b08d590a5ecfe9b0963de64b718aad9e7935d6e209e41b92a71b67fb350f

@@ -1,0 +1,20 @@
+[
+  {
+    "action_id": "lab-0001",
+    "attack": {"tactic": "TA0007", "technique": "T1046"},
+    "tool_name": "nmap",
+    "target": "127.0.0.1",
+    "action_class": "read",
+    "params": {"targets": ["127.0.0.1"], "scan_type": "connect", "ports": "18080,18443,22,9999"},
+    "rationale": "양성 표적 서비스 탐지 (라이브 정찰 파이프라인 검증)"
+  },
+  {
+    "action_id": "lab-0002",
+    "attack": {"tactic": "TA0007", "technique": "T1046"},
+    "tool_name": "nmap",
+    "target": "8.8.8.8",
+    "action_class": "read",
+    "params": {"targets": ["8.8.8.8"], "scan_type": "connect", "ports": "80"},
+    "rationale": "스코프 밖 대상 — DENY 되어야 정상"
+  }
+]
