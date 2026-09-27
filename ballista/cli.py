@@ -27,6 +27,7 @@ from .authorization.scope import load_verified_scope, ScopeError
 from .policy.action import Action
 from .policy.engine import PolicyEngine, Decision
 from .policy.approval import ApprovalStore, require_approval_or_raise
+from .policy.notify import console_notifier, webhook_notifier
 from .adapters.registry import build_registry
 from .evidence.store import EvidenceStore, tool_result_to_record
 from .reporter.reporter import coverage_summary, navigator_layer
@@ -54,7 +55,12 @@ async def _run(args):
     registry = build_registry(scope)
     policy = PolicyEngine()
     store = EvidenceStore(args.db)
-    approvals = ApprovalStore(args.db)
+    notifier = webhook_notifier(args.notify_webhook) if getattr(args, "notify_webhook", None) else console_notifier
+    approvals = ApprovalStore(args.db, notifier=notifier)
+    # 스코프의 승인 설정(정족수·TTL). 없으면 기본 1-of-1, 무기한.
+    appr_cfg = (getattr(scope, "raw", {}) or {}).get("approval") or {}
+    quorum = int(appr_cfg.get("quorum", 1))
+    ttl_seconds = appr_cfg.get("ttl_seconds")
 
     with open(args.actions, "r", encoding="utf-8") as f:
         raw_actions = json.load(f)
@@ -78,10 +84,15 @@ async def _run(args):
             elif st == "denied":
                 print(f"[DENIED] {a.action_id} {a.tool_name} → 승인 거부됨, 건너뜀")
                 continue
+            elif st == "expired":
+                print(f"[EXPIRED] {a.action_id} {a.tool_name} → 승인 요청 만료됨, 건너뜀")
+                continue
             else:
-                rid = approvals.request(scope.engagement_id, a)
+                rid = approvals.request(scope.engagement_id, a,
+                                        ttl_seconds=ttl_seconds, quorum=quorum)
+                extra = f" · 정족수 {quorum}" + (f" · TTL {ttl_seconds}s" if ttl_seconds else "")
                 print(f"[APPROVAL] {a.action_id} {a.tool_name} → 승인 필요 "
-                      f"(request_id={rid}). 'ballista approve {rid} --approver 이름' 후 재실행")
+                      f"(request_id={rid}{extra}). 'ballista approve {rid} --approver 이름' 후 재실행")
                 store.append(scope.engagement_id, {
                     "action_id": a.action_id, "tool_name": a.tool_name,
                     "target": a.target, "result": "blocked",
@@ -180,11 +191,13 @@ def _approvals(args):
         print("대기 중 승인 없음"); return
     print(f"대기 중 승인 {len(pend)}건:")
     for p in pend:
-        print(f"  {p['request_id']}  {p['action_id']}  {p['summary']}")
+        prog = f" [{p.get('approvals', 0)}/{p.get('quorum', 1)}]"
+        print(f"  {p['request_id']}  {p['action_id']}  {p['summary']}{prog}")
 
 
 def _approve(args):
-    ap = ApprovalStore(args.db)
+    notifier = webhook_notifier(args.notify_webhook) if args.notify_webhook else console_notifier
+    ap = ApprovalStore(args.db, notifier=notifier)
     res = ap.decide(args.request_id, args.approver, approved=not args.deny)
     if res is None:
         print(f"해당 request_id 없음: {args.request_id}"); sys.exit(1)
@@ -195,7 +208,13 @@ def _approve(args):
         "reason": f"{res['status']} by {args.approver}",
         "summary": res["summary"],
     })
-    print(f"{res['status'].upper()}: {args.request_id} ({res['action_id']}) by {args.approver} — 감사 기록됨")
+    tail = ""
+    if res["status"] == "pending":
+        tail = f" — 정족수 대기 {res.get('approvals')}/{res.get('quorum')}"
+    elif res["status"] == "expired":
+        tail = " — 요청이 만료되어 결정 불가"
+    print(f"{res['status'].upper()}: {args.request_id} ({res['action_id']}) "
+          f"by {args.approver} — 감사 기록됨{tail}")
 
 
 def main(argv=None):
@@ -208,6 +227,7 @@ def main(argv=None):
     rp = sub.add_parser("run")
     rp.add_argument("scope"); rp.add_argument("keydir"); rp.add_argument("actions")
     rp.add_argument("--db", default="evidence.db")
+    rp.add_argument("--notify-webhook", default=None, help="승인 요청 알림 웹훅 URL")
 
     rep = sub.add_parser("report")
     rep.add_argument("engagement_id"); rep.add_argument("--db", default="evidence.db")
@@ -246,6 +266,7 @@ def main(argv=None):
     apr.add_argument("request_id")
     apr.add_argument("--approver", required=True)
     apr.add_argument("--deny", action="store_true", help="승인 대신 거부")
+    apr.add_argument("--notify-webhook", default=None, help="승인 결정 알림 웹훅 URL")
     apr.add_argument("--db", default="evidence.db")
 
     args = p.parse_args(argv)

@@ -24,8 +24,10 @@ constraints:
   - T1485
 approval:
   destructive_requires: human
+  quorum: 2
+  ttl_seconds: 3600
 signature:
   algorithm: Ed25519
   key_id: secteam-signing-2026
   signed_at: '2026-09-27T14:00:00+09:00'
-  value: cc2e872eda28f4cda5f9587c77696b5785ebbafa9f31a265cd69c8c5472ac8c322c668378632dc15788783d0cdcfe705f743eaa2c66950b137445a654d1ffb07
+  value: d219ab4479bcd43ce054f8a08eb13f553ac8c02ad55fd848f5048a22919002a58fa489a996de16d3b2422ab8231612a9c058f03c3e1ff17d64dce4ec29791a0e
