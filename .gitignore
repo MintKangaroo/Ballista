@@ -12,3 +12,4 @@ node_modules/
 lab/evidence.db
 lab/report.md
 lab/*.pdf
+lab/replay.yaml

@@ -32,6 +32,7 @@ from .adapters.registry import build_registry
 from .evidence.store import EvidenceStore, tool_result_to_record
 from .reporter.reporter import coverage_summary, navigator_layer
 from .reporter.report_builder import write_report
+from .reporter.replay import export_replay_yaml
 from .dashboard.binding import export_dashboard_json
 from .ingest.ingest import ingest_file
 from .attack.refs import AttackRef
@@ -128,9 +129,11 @@ async def _run(args):
         try:
             result = await adapter.run(adapter.validate(a.params))
             status = "success" if result.returncode == 0 else "failure"
-            store.append(scope.engagement_id, tool_result_to_record(
+            rec = tool_result_to_record(
                 result, action_id=a.action_id, engagement_id=scope.engagement_id,
-                target=a.target, action_class=a.action_class, result_status=status))
+                target=a.target, action_class=a.action_class, result_status=status)
+            rec["params"] = a.params        # 결정론적 replay 번들 재구성용(원본 파라미터)
+            store.append(scope.engagement_id, rec)
             print(f"[{status.upper()}] {a.action_id} {a.tool_name} → {a.target}")
         except NotImplementedError as e:
             print(f"[PENDING] {a.action_id} {a.tool_name} → 실행부 미구현: {e}")
@@ -158,6 +161,14 @@ def _report_doc(args):
         print(f"PDF 생성: {res['pdf']}")
     elif res.get("pdf_note"):
         print(f"  ({res['pdf_note']})")
+
+
+def _replay(args):
+    store = EvidenceStore(args.db)
+    res = export_replay_yaml(store, args.engagement_id, args.out)
+    print(f"replay 번들 생성: {res['path']}  (성공 스텝 {res['steps']}개)")
+    print("  ※ 명세일 뿐이며 스스로 실행되지 않습니다. 재실행은 스코프 검증·승인 게이트를 "
+          "다시 통과시킨 뒤 운용자가 수행합니다.")
 
 
 def _verify_chain(args):
@@ -241,6 +252,11 @@ def main(argv=None):
                     help="부록에 방어 어시스턴트 LLM 프롬프트 포함")
     rd.add_argument("--pdf", action="store_true", help="pandoc 있으면 PDF도 생성")
 
+    rpl = sub.add_parser("replay", help="성공 경로를 결정론적 재실행 명세(YAML)로 export")
+    rpl.add_argument("engagement_id")
+    rpl.add_argument("--db", default="evidence.db")
+    rpl.add_argument("--out", default="replay.yaml")
+
     vc = sub.add_parser("verify-chain")
     vc.add_argument("engagement_id"); vc.add_argument("--db", default="evidence.db")
 
@@ -279,6 +295,8 @@ def main(argv=None):
             _report(args)
         elif args.cmd == "report-doc":
             _report_doc(args)
+        elif args.cmd == "replay":
+            _replay(args)
         elif args.cmd == "verify-chain":
             _verify_chain(args)
         elif args.cmd == "dashboard":
