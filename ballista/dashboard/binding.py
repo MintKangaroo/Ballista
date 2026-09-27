@@ -225,6 +225,44 @@ def _scope_section(scope):
     }
 
 
+def build_attack_path_graph(records):
+    """성공 경로를 노드/엣지 그래프로 요약.
+
+    노드: 대상 호스트, 참조된 자격증명(cred_ref), 진입점(entry).
+    엣지: 성공한 기법이 어느 노드에서 어느 호스트로 향했는지(기법 라벨).
+    프런트(dashboard.html)가 그대로 소비하는 형태 — 순수 집계, 실행 없음.
+    """
+    nodes: dict[str, dict] = {"entry": {"id": "entry", "kind": "entry", "label": "진입점"}}
+    edges = []
+    for rec in records:
+        if rec.get("result") != "success":
+            continue
+        tid = _tid(rec)
+        if not tid:
+            continue
+        target = rec.get("target") or ""
+        params = rec.get("params") or {}
+        # 대상 호스트 노드
+        if target:
+            nodes.setdefault(target, {"id": target, "kind": "host", "label": target})
+        # 자격증명 참조 노드
+        cred = params.get("cred_ref")
+        if cred:
+            nodes.setdefault(cred, {"id": cred, "kind": "credential", "label": cred})
+        # 출발 노드: 명시된 source/from 호스트가 있으면 그 호스트, 없으면 진입점
+        src = params.get("source") or params.get("from")
+        if src:
+            nodes.setdefault(src, {"id": src, "kind": "host", "label": src})
+        src_id = src or (cred or "entry")
+        if target:
+            edges.append({
+                "from": src_id, "to": target,
+                "technique": tid, "label": ATTACK_NAMES.get(tid, tid),
+                "tool": rec.get("tool_name", ""),
+            })
+    return {"nodes": list(nodes.values()), "edges": edges}
+
+
 def build_dashboard_data(store, scope, engagement_id, detected_technique_ids=None):
     records = list(store.records(engagement_id))
     summary = coverage_summary(store, engagement_id)
@@ -246,6 +284,7 @@ def build_dashboard_data(store, scope, engagement_id, detected_technique_ids=Non
         "FEED": _feed(records),
         "GAPS": gaps,
         "VULNS": findings,
+        "GRAPH": build_attack_path_graph(records),
         "SCOPE": _scope_section(scope),
     }
 

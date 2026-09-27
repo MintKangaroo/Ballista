@@ -115,6 +115,29 @@
   ],
   "GAPS": [],
   "VULNS": [],
+  "GRAPH": {
+    "nodes": [
+      {
+        "id": "entry",
+        "kind": "entry",
+        "label": "진입점"
+      },
+      {
+        "id": "10.20.0.5",
+        "kind": "host",
+        "label": "10.20.0.5"
+      }
+    ],
+    "edges": [
+      {
+        "from": "entry",
+        "to": "10.20.0.5",
+        "technique": "T1046",
+        "label": "네트워크 서비스 탐지",
+        "tool": "nmap"
+      }
+    ]
+  },
   "SCOPE": {
     "time_window": "active",
     "max_class": "modify",
