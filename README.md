@@ -142,14 +142,68 @@ python -m ballista.cli run scope.yaml keys/ actions.json --db evidence.db   # �
 기법·결과 기반 템플릿으로 채워지며, 이후 방어지향 어시스턴트로 evidence 기반 자동
 생성으로 바꿀 수 있다.
 
+### 추가 명령 (오케스트레이션·분석)
+
+```bash
+# 리포트 초안(.md): 경영 요약·ATT&CK 커버리지·타임라인·발견 취약점·탐지 공백·증거 무결성
+python -m ballista.cli report-doc scope.yaml keys/ --db evidence.db \
+    --out report.md --with-prompts          # 부록에 방어 어시스턴트 LLM 프롬프트 포함
+    # --pdf 지정 시 pandoc이 있으면 PDF도 생성
+
+# replay 번들: 성공 경로를 결정론적 재실행 명세(YAML)로 export (자격증명 값 미포함)
+python -m ballista.cli replay ENG-2026-0042 --db evidence.db --out replay.yaml
+
+# 방어 어시스턴트: 교전 요약 / 탐지공백 방어 / ATT&CK 학습 (기본은 프롬프트만 출력)
+python -m ballista.cli explain scope.yaml keys/ --db evidence.db --mode summary
+python -m ballista.cli explain scope.yaml keys/ --db evidence.db --mode gaps --detected "T1046"
+python -m ballista.cli explain scope.yaml keys/ --db evidence.db --mode learn \
+    --question "T1021.002는 어떻게 탐지하나?" --send   # --send 시 Claude 호출(claude-opus-5)
+
+# cleanup/롤백 추적: 교전 중 생성 아티팩트 목록화·회수 체크리스트
+python -m ballista.cli cleanup register scope.yaml keys/ --type account \
+    --id svc-temp01 --host 10.20.0.5 --note "net user svc-temp01 /del" --by 윤지창 --db evidence.db
+python -m ballista.cli cleanup list ENG-2026-0042 --db evidence.db
+python -m ballista.cli cleanup reclaim clp-xxxxxxxx --by 홍길동 --db evidence.db
+python -m ballista.cli cleanup checklist ENG-2026-0042 --db evidence.db --out cleanup.md
+```
+
+### 결과 수집(ingest) 지원 도구
+
+`nmap`(XML) · `nuclei`(JSONL) · `masscan`(XML) · `httpx`(JSONL) · `gobuster`(텍스트/JSON).
+전부 **이미 생성된 출력 파일을 읽기만** 한다(도구 실행 X). 출력에 호스트가 없는 도구
+(gobuster 텍스트)는 `--target`으로 대상을 지정한다. 새 도구는 `ingest/parsers.py`의
+`PARSERS`에 파서 함수를 추가해 확장한다.
+
+### 승인 게이트 강화 (스코프 `approval` 블록)
+
+```yaml
+approval:
+  destructive_requires: human
+  quorum: 2            # N-of-M: 서로 다른 승인자 2명 필요
+  ttl_seconds: 3600    # 승인 요청 유효시간(미충족 시 만료되어 실행 불가)
+```
+
+`ballista approve`는 정족수를 채울 때까지 `pending`으로 집계되고, 한 명이라도 거부하면
+즉시 `denied`. `--notify-webhook <URL>`로 요청/결정 알림을 보낼 수 있다.
+
+### 라이브 검증(lab)
+
+`lab/`에 취약점 없는 양성 표적(nginx)으로 정찰→게이팅→증거→리포트 파이프라인을
+라이브로 검증하는 하니스가 있다(`lab/README.md`). 실측: nmap이 실제 열린 포트를 탐지,
+범위 밖 대상 DENY, 해시 체인 무결 OK.
+
 ## 현재 상태 · 다음 단계
 
 동작: 스코프 서명검증, 정책 게이팅, 정찰 어댑터, 증거 체인, 리포터, CLI, 시각화.
 
 운용자 구현 몫: `adapters/{exploit,credential,lateral}.py`의 `run()` 본체.
 
-완료: 대시보드 라이브 바인딩, 승인 게이트, 결과 수집(ingest), 방어지향 어시스턴트
-(대시보드에 sample 기반으로 구현 · 파이썬 프롬프트 빌더 제공).
+완료: 대시보드 라이브 바인딩, 승인 게이트(+TTL·N-of-M·알림 훅), 결과 수집(ingest,
+5개 도구), 방어지향 어시스턴트(프롬프트 빌더 + `explain` LLM 연결), 리포트 생성기
+(`report-doc`), replay 번들(`replay`), cleanup/롤백 추적(`cleanup`), 공격경로 그래프
+데이터, 라이브 검증 하니스(`lab/`). 테스트 45개 통과.
+
+남은 폭(선택): dashboard.html의 인터랙티브 공격경로 그래프 렌더링(GRAPH 데이터는 제공됨).
 
 ## 문서
 
