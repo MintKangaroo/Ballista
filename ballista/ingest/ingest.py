@@ -17,8 +17,13 @@ from ..evidence.store import EvidenceStore
 
 
 def ingest_file(store: EvidenceStore, scope, tool: str, path: str,
-                operator: str, action_prefix: str = "ing") -> dict:
-    """도구 출력 파일 하나를 수집. 요약 dict 반환."""
+                operator: str, action_prefix: str = "ing",
+                default_target: str | None = None) -> dict:
+    """도구 출력 파일 하나를 수집. 요약 dict 반환.
+
+    default_target : 출력에 대상 호스트가 없는 도구(gobuster 텍스트 등)를 위한 폴백.
+                     파서가 target을 주지 않은(None/빈) 레코드에만 채워진다.
+    """
     if tool not in PARSERS:
         raise ValueError(f"지원하지 않는 도구: {tool} (지원: {', '.join(PARSERS)})")
 
@@ -31,10 +36,11 @@ def ingest_file(store: EvidenceStore, scope, tool: str, path: str,
     ingested_at = datetime.now(timezone.utc).isoformat()
 
     for i, rec in enumerate(records):
-        target = rec.get("target", "")
+        target = rec.get("target") or default_target or ""
+        rec = dict(rec)
+        rec["target"] = target
         # 스코프 밖 대상은 기록하되 거부로 표시 (감사 목적)
         in_scope = scope.is_target_in_scope(target)
-        rec = dict(rec)
         rec["action_id"] = f"{action_prefix}-{tool}-{i+1:03d}"
         rec["operator"] = operator
         rec["ingested_at"] = ingested_at

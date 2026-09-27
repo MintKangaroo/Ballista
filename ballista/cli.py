@@ -167,7 +167,8 @@ def _dashboard(args):
 def _ingest(args):
     scope = _scope(args)
     store = EvidenceStore(args.db)
-    summary = ingest_file(store, scope, args.tool, args.file, args.operator)
+    summary = ingest_file(store, scope, args.tool, args.file, args.operator,
+                          default_target=args.target)
     print(f"수집 완료: {args.tool}  레코드 {summary['records']}건 "
           f"(기록 {summary['ingested']} · 스코프밖 거부 {summary['rejected']})")
     print(f"  원본 해시: {summary['raw_sha256'][:32]}…  운용자: {summary['operator']}")
@@ -231,9 +232,11 @@ def main(argv=None):
 
     ing = sub.add_parser("ingest")
     ing.add_argument("scope"); ing.add_argument("keydir")
-    ing.add_argument("tool", help="도구 이름 (nmap | nuclei)")
-    ing.add_argument("file", help="도구 원본 출력 파일 (nmap XML, nuclei JSONL)")
+    ing.add_argument("tool", help="도구 이름 (nmap | nuclei | masscan | httpx | gobuster)")
+    ing.add_argument("file", help="도구 원본 출력 파일")
     ing.add_argument("--operator", required=True, help="수집 운용자 이름")
+    ing.add_argument("--target", default=None,
+                     help="출력에 호스트가 없는 도구(gobuster 텍스트)용 대상 폴백")
     ing.add_argument("--db", default="evidence.db")
 
     apl = sub.add_parser("approvals")
