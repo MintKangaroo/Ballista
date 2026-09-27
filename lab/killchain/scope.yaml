@@ -1,0 +1,22 @@
+schema_version: '1.0'
+engagement:
+  id: ENG-DEMO-KILLCHAIN
+  name: 합성 킬체인 시연(시뮬레이션 전용)
+  authorized_by: self-demo
+  roe_document_ref: RoE-DEMO
+target:
+  in_scope_cidrs:
+  - 127.0.0.1/32
+  - 10.99.0.0/24
+  in_scope_hosts:
+  - localhost
+  out_of_scope_hosts: []
+constraints:
+  time_window:
+    start: '2026-01-01T00:00:00+09:00'
+    end: '2030-12-31T23:59:59+09:00'
+  max_action_class: modify
+signature:
+  key_id: ballista-demo-2026
+  algorithm: ed25519
+  value: f97405d0c19b1c5353cef67e9f1d04c1f66b3c51167bac528825a4b65af974718802fa546868a8eabbdafad4c18f10d7735a59a28eedc66986c76f0dfa5ea505

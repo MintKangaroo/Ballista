@@ -15,3 +15,8 @@ lab/*.pdf
 lab/replay.yaml
 lab/cleanup.db
 lab/*.md
+lab/**/keys/
+lab/**/evidence.db
+lab/**/dashboard.json
+lab/**/report.md
+lab/**/replay.yaml

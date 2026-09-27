@@ -131,14 +131,23 @@ async def _run(args):
                 print(f"[BLOCKED] {a.action_id} → {e}")
                 continue
         try:
-            result = await adapter.run(adapter.validate(a.params))
+            validated = adapter.validate(a.params)
+            simulated = bool(getattr(args, "simulate", False)
+                             and getattr(adapter, "supports_simulation", False))
+            if simulated:
+                result = adapter.simulate(validated)     # 실제 실행 없음(합성 결과)
+            else:
+                result = await adapter.run(validated)
             status = "success" if result.returncode == 0 else "failure"
             rec = tool_result_to_record(
                 result, action_id=a.action_id, engagement_id=scope.engagement_id,
                 target=a.target, action_class=a.action_class, result_status=status)
             rec["params"] = a.params        # 결정론적 replay 번들 재구성용(원본 파라미터)
+            if simulated:
+                rec["simulated"] = True     # evidence에 '합성'으로 낙인
             store.append(scope.engagement_id, rec)
-            print(f"[{status.upper()}] {a.action_id} {a.tool_name} → {a.target}")
+            tag = " (SIMULATED)" if simulated else ""
+            print(f"[{status.upper()}] {a.action_id} {a.tool_name} → {a.target}{tag}")
         except NotImplementedError as e:
             print(f"[PENDING] {a.action_id} {a.tool_name} → 실행부 미구현: {e}")
         except FileNotFoundError:
@@ -306,6 +315,8 @@ def main(argv=None):
     rp.add_argument("scope"); rp.add_argument("keydir"); rp.add_argument("actions")
     rp.add_argument("--db", default="evidence.db")
     rp.add_argument("--notify-webhook", default=None, help="승인 요청 알림 웹훅 URL")
+    rp.add_argument("--simulate", action="store_true",
+                    help="공격 계열 어댑터를 실제 실행 대신 합성 결과로 시뮬레이션(테스트/시연용)")
 
     rep = sub.add_parser("report")
     rep.add_argument("engagement_id"); rep.add_argument("--db", default="evidence.db")

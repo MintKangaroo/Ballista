@@ -1,0 +1,12 @@
+[
+  {"action_id":"kc-01","tool_name":"exploit","target":"10.99.0.10","action_class":"modify",
+   "attack":{"tactic":"TA0001","technique":"T1190"},"params":{"target":"10.99.0.10"},
+   "rationale":"초기 접근 (시뮬레이션)"},
+  {"action_id":"kc-02","tool_name":"credential","target":"10.99.0.10","action_class":"modify",
+   "attack":{"tactic":"TA0006","technique":"T1003"},"params":{"target":"10.99.0.10"},
+   "rationale":"자격증명 확보 (시뮬레이션)"},
+  {"action_id":"kc-03","tool_name":"lateral","target":"10.99.0.20","action_class":"modify",
+   "attack":{"tactic":"TA0008","technique":"T1021","sub_technique":"T1021.002"},
+   "params":{"target":"10.99.0.20","source":"10.99.0.10","cred_ref":"cred-demo-1"},
+   "rationale":"측면 이동 (시뮬레이션)"}
+]

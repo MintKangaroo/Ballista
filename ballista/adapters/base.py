@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 try:
     import jsonschema
@@ -64,3 +64,30 @@ class ToolAdapter(ABC):
         """검증된 외부 도구를 호출하고 ToolResult를 반환.
         공격 실행 계열은 여기서 NotImplementedError로 두고 운용자가 구현한다."""
         raise NotImplementedError
+
+    # ── 시뮬레이션 (테스트/시연 전용) ──
+    # 실제 run()과 완전히 분리된 경로. 외부 도구를 호출하지 않고, 페이로드를 만들지
+    # 않으며, 명백히 '합성'으로 표시된 가짜 결과만 돌려준다. 목적은 오케스트레이션
+    # 파이프라인(게이트→승인→증거→리포트→그래프)이 공격 계열 tactic까지 도는지
+    # 검증하는 것뿐이다. INV-1/INV-2의 실제 run()은 스텁 그대로 유지된다.
+    supports_simulation: bool = False
+
+    def simulate(self, validated_params: dict) -> ToolResult:
+        raise NotImplementedError("이 어댑터는 시뮬레이션을 지원하지 않습니다.")
+
+    def _simulated_result(self, target: str, note: str) -> ToolResult:
+        """명백히 가짜로 표시된 ToolResult. 실제 행위 없음."""
+        self._assert_targets_in_scope(target)   # 시뮬레이션도 스코프 게이팅은 적용
+        now = datetime.now(timezone.utc)
+        return ToolResult(
+            tool=self.name,
+            argv=["<simulated>", self.name, str(target)],
+            returncode=0,
+            raw_output=b"",
+            stderr="SIMULATION — 실제 도구 호출/공격 없음",
+            parsed={"simulated": True, "target": target, "note": note,
+                    "warning": "합성 데이터입니다. 실제 공격·페이로드·자격증명 없음."},
+            started_at=now,
+            finished_at=now,
+            attack=self.attack_techniques[0],
+        )

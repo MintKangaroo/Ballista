@@ -25,8 +25,13 @@ class LateralAdapter(ToolAdapter):
         "required": ["target"],
         "properties": {
             "target": {"type": "string"},
+            # 참조 메타데이터(실행 값 아님): 출발 호스트·자격증명 참조
+            "source": {"type": "string"},
+            "cred_ref": {"type": "string"},
         },
     }
+
+    supports_simulation = True
 
     def __init__(self, scope):
         self._scope = scope
@@ -35,3 +40,8 @@ class LateralAdapter(ToolAdapter):
         self._assert_targets_in_scope(validated_params["target"])   # 이동 대상 재검증
         # ── 여기 실제 도구 호출부를 구현 ──
         raise NotImplementedError("lateral run() 본체는 운용자가 구현합니다.")
+
+    def simulate(self, validated_params: dict) -> ToolResult:
+        """실행 없이 파이프라인 검증용 합성 결과. 실제 이동/접속 없음."""
+        return self._simulated_result(validated_params["target"],
+                                      "측면 이동 시뮬레이션(가상). 실제 접속·이동 없음.")
