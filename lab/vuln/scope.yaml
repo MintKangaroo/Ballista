@@ -1,0 +1,21 @@
+schema_version: '1.0'
+engagement:
+  id: ENG-VULN-LAB
+  name: 취약 훈련표적 탐지(스캔 전용, 침투 X)
+  authorized_by: self-test
+  roe_document_ref: RoE-VULN-LAB
+target:
+  in_scope_cidrs:
+  - 127.0.0.1/32
+  in_scope_hosts:
+  - localhost
+  out_of_scope_hosts: []
+constraints:
+  time_window:
+    start: '2026-01-01T00:00:00+09:00'
+    end: '2030-12-31T23:59:59+09:00'
+  max_action_class: read
+signature:
+  key_id: ballista-vuln-2026
+  algorithm: ed25519
+  value: 2bdb185015a444faa55371559da2dce50ad8d4461864347dcfc05e29bff00d7f01a95319e4f06614cdd1db099693379d28c387318dc475b436d817c7c378a807

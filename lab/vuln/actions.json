@@ -1,0 +1,7 @@
+[
+  {"action_id":"vuln-01","tool_name":"nuclei","target":"http://127.0.0.1:13000",
+   "action_class":"read","attack":{"tactic":"TA0043","technique":"T1595","sub_technique":"T1595.002"},
+   "params":{"targets":["http://127.0.0.1:13000"],"severity":["info","low","medium","high","critical"],
+             "include_tags":["tech","exposure","misconfig","headers"],"timeout":5,"rate_limit":150},
+   "rationale":"취약 훈련표적 탐지(존재 여부만, 침투 X)"}
+]
