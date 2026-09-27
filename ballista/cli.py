@@ -30,6 +30,7 @@ from .policy.approval import ApprovalStore, require_approval_or_raise
 from .adapters.registry import build_registry
 from .evidence.store import EvidenceStore, tool_result_to_record
 from .reporter.reporter import coverage_summary, navigator_layer
+from .reporter.report_builder import write_report
 from .dashboard.binding import export_dashboard_json
 from .ingest.ingest import ingest_file
 from .attack.refs import AttackRef
@@ -134,6 +135,20 @@ def _report(args):
     print(json.dumps(navigator_layer(summary), ensure_ascii=False, indent=2))
 
 
+def _report_doc(args):
+    scope = _scope(args)
+    store = EvidenceStore(args.db)
+    detected = set(t.strip() for t in args.detected.split(",") if t.strip()) if args.detected else set()
+    res = write_report(store, scope, scope.engagement_id, args.out,
+                       detected_technique_ids=detected,
+                       with_prompts=args.with_prompts, pdf=args.pdf)
+    print(f"리포트 생성: {res['md']}")
+    if res.get("pdf"):
+        print(f"PDF 생성: {res['pdf']}")
+    elif res.get("pdf_note"):
+        print(f"  ({res['pdf_note']})")
+
+
 def _verify_chain(args):
     store = EvidenceStore(args.db)
     ok = store.verify_chain(args.engagement_id)
@@ -196,6 +211,15 @@ def main(argv=None):
     rep = sub.add_parser("report")
     rep.add_argument("engagement_id"); rep.add_argument("--db", default="evidence.db")
 
+    rd = sub.add_parser("report-doc", help="evidence → 기술/경영 리포트 초안(.md)")
+    rd.add_argument("scope"); rd.add_argument("keydir")
+    rd.add_argument("--db", default="evidence.db")
+    rd.add_argument("--out", default="report.md")
+    rd.add_argument("--detected", default="", help="SOC 탐지 technique id 콤마구분")
+    rd.add_argument("--with-prompts", action="store_true",
+                    help="부록에 방어 어시스턴트 LLM 프롬프트 포함")
+    rd.add_argument("--pdf", action="store_true", help="pandoc 있으면 PDF도 생성")
+
     vc = sub.add_parser("verify-chain")
     vc.add_argument("engagement_id"); vc.add_argument("--db", default="evidence.db")
 
@@ -229,6 +253,8 @@ def main(argv=None):
             asyncio.run(_run(args))
         elif args.cmd == "report":
             _report(args)
+        elif args.cmd == "report-doc":
+            _report_doc(args)
         elif args.cmd == "verify-chain":
             _verify_chain(args)
         elif args.cmd == "dashboard":
